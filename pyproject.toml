@@ -1,6 +1,7 @@
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+extend-include = ["*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "C90", "NPY", "PD", "RUF"]
@@ -10,7 +11,6 @@ ignore-init-module-imports = true
 quote-style = "double"
 
 [tool.mypy]
-files = ["src"]
 ignore_missing_imports = true
 disallow_untyped_defs = true
 warn_unused_ignores = true
