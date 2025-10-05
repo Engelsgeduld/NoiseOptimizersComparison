@@ -1,0 +1,16 @@
+name: opims_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - numpy
+  - pandas
+  - scikit-learn
+  - pytorch
+  - matplotlib
+  - jupyterlab
+  - pip
+  - pip:
+      - ruff
+      - mypy
