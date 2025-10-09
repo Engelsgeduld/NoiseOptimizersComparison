@@ -54,7 +54,7 @@ class ModelTrainer:
                 "exp_name": self.exp_conf.exp_name,
                 "dataset": dataset_name,
                 "mlflow_run_id": run.info.run_id,
-                "model": model if not self.log_model else None,
+                "model": model,
                 "final_train_loss": train_losses[-1],
                 "final_val_loss": val_losses[-1],
             }
