@@ -1,0 +1,6 @@
+colorednoise~=2.2.0
+mlflow~=3.2.0
+mlflow-skinny~=3.2.0
+scikit-learn~=1.6.1
+pandas~=2.2.3
+darts~=0.38.0

@@ -1,6 +1,6 @@
 import numpy as np
 
-from configurations.noises_config import NoiseConfig
+from configurations.configs import NoiseConfig
 from noises.utils.noise_generator import _normalize_noise, generate_noise, mix_noises
 
 
