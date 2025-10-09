@@ -1,5 +1,4 @@
 import os
-import tempfile
 
 import mlflow
 import numpy as np
@@ -51,23 +50,19 @@ class ModelTester:
                 mlflow.log_metric("test_auto_mse", auto_mse)
 
                 if self.save_predictions:
-                    with tempfile.TemporaryDirectory() as tmpdir:
-                        onestep_df = pd.DataFrame({"y_true": true_preds.flatten(), "y_pred": preds.flatten()})
-                        onestep_path = os.path.join(tmpdir, "preds_onestep.csv")
-                        onestep_df.to_csv(onestep_path, index=False)
+                    onestep_preds_path = "preds_onestep.csv"
+                    df_onestep = pd.DataFrame({"true_values": true_preds, "predictions": preds})
+                    df_onestep.to_csv(onestep_preds_path, index=False)
+                    mlflow.log_artifact(onestep_preds_path, "predictions")
+                    os.remove(onestep_preds_path)
+                    auto_preds_path = "preds_auto.csv"
 
-                        auto_df = pd.DataFrame(
-                            {
-                                "y_true": test_signal[self.common_params["sequence_length"] :].flatten(),
-                                "y_pred": auto_preds.flatten(),
-                            }
-                        )
-
-                        auto_path = os.path.join(tmpdir, "preds_auto.csv")
-                        auto_df.to_csv(auto_path, index=False)
-
-                        mlflow.log_artifact(onestep_path, artifact_path="predictions")
-                        mlflow.log_artifact(auto_path, artifact_path="predictions")
+                    df_auto = pd.DataFrame(
+                        {"true_values": test_signal[self.common_params["sequence_length"] :], "predictions": auto_preds}
+                    )
+                    df_auto.to_csv(auto_preds_path, index=False)
+                    mlflow.log_artifact(auto_preds_path, "predictions")
+                    os.remove(auto_preds_path)
 
         return {
             "run_id": mlflow_run_id,
