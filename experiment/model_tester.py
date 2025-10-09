@@ -1,5 +1,9 @@
+import os
+import tempfile
+
 import mlflow
 import numpy as np
+import pandas as pd
 import torch
 from sklearn.metrics import mean_squared_error
 from torch import nn
@@ -9,9 +13,10 @@ from experiment.utils.sequences_creator import create_sequences
 
 
 class ModelTester:
-    def __init__(self, common_params: dict):
+    def __init__(self, common_params: dict, save_predictions: bool = False):
         self.common_params = common_params
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.save_predictions = save_predictions
 
     def test_model(
         self, test_signal: np.ndarray, model: nn.Module | None = None, mlflow_run_id: str | None = None
@@ -44,6 +49,25 @@ class ModelTester:
             with mlflow.start_run(run_id=mlflow_run_id):
                 mlflow.log_metric("test_onestep_mse", mse_onestep)
                 mlflow.log_metric("test_auto_mse", auto_mse)
+
+                if self.save_predictions:
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        onestep_df = pd.DataFrame({"y_true": true_preds.flatten(), "y_pred": preds.flatten()})
+                        onestep_path = os.path.join(tmpdir, "preds_onestep.csv")
+                        onestep_df.to_csv(onestep_path, index=False)
+
+                        auto_df = pd.DataFrame(
+                            {
+                                "y_true": test_signal[self.common_params["sequence_length"] :].flatten(),
+                                "y_pred": auto_preds.flatten(),
+                            }
+                        )
+
+                        auto_path = os.path.join(tmpdir, "preds_auto.csv")
+                        auto_df.to_csv(auto_path, index=False)
+
+                        mlflow.log_artifact(onestep_path, artifact_path="predictions")
+                        mlflow.log_artifact(auto_path, artifact_path="predictions")
 
         return {
             "run_id": mlflow_run_id,
