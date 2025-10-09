@@ -8,10 +8,17 @@ from experiment.model_trainer import ModelTrainer
 
 
 class SessionRunner:
-    def __init__(self, session_config: SessionConfig, datasets: dict[str, np.ndarray], log_model: bool = True):
+    def __init__(
+        self,
+        session_config: SessionConfig,
+        datasets: dict[str, np.ndarray],
+        log_model: bool = True,
+        save_predictions: bool = False,
+    ):
         self.session_config = session_config
         self.datasets = datasets
         self.log_model = log_model
+        self.save_predictions = save_predictions
         self.results: list = []
 
     def run(self) -> pd.DataFrame:
@@ -23,7 +30,7 @@ class SessionRunner:
             for dataset_name in exp_conf.datasets:
                 result = trainer.train_on_dataset(self.datasets[dataset_name], dataset_name)
 
-                tester = ModelTester(common_params)
+                tester = ModelTester(common_params, save_predictions=self.save_predictions)
                 test_result = tester.test_model(
                     model=result.get("model"),
                     mlflow_run_id=result["mlflow_run_id"],
