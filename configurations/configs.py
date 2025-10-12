@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 import numpy as np
+from torch import nn
 
 
 @dataclass
@@ -29,6 +30,7 @@ class ExperimentConfig:
         model_params (dict): Parameters for the model initialization.
         optimizer (str): Name of the optimizer (e.g., 'adam', 'sgd').
         optimizer_params (dict): Parameters for the optimizer initialization.
+        criterion (nnn.Module): Criterion
         datasets (List[str]): List of dataset names to use for training.
     """
 
@@ -37,7 +39,11 @@ class ExperimentConfig:
     model_params: dict
     optimizer: str
     optimizer_params: dict
+    criterion: nn.Module
     datasets: list[str]
+    politic: str = "standard"
+    politic_params: dict = field(default_factory=dict)
+    n_runs: int = 5
 
 
 @dataclass
@@ -59,3 +65,17 @@ class SessionConfig:
     common_params: dict
     experiments: list[ExperimentConfig]
     test_signal: np.ndarray
+
+
+@dataclass
+class DatasetConfig:
+    """
+    Attributes:
+        name (str)
+        signal (np.ndarray)
+        metadata (Dict[str, Any])
+    """
+
+    name: str
+    signal: np.ndarray
+    metadata: dict = field(default_factory=dict)

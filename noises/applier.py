@@ -1,6 +1,6 @@
 import numpy as np
 
-from configurations.configs import NoiseConfig
+from configurations.configs import DatasetConfig, NoiseConfig
 from noises.utils.noise_generator import _normalize_noise, generate_noise, mix_noises
 
 
@@ -17,11 +17,10 @@ class NoiseApplier:
         noise_variance = signal_power / snr_linear
         return noise_variance
 
-    def apply(self, noise_configurations: list[NoiseConfig]) -> dict:
+    def apply(self, noise_configurations: list[NoiseConfig]) -> dict[str, DatasetConfig]:
         noisy_datasets = {}
 
         for config in noise_configurations:
-            name = config.name
             noise_type = config.type
             params = config.n_params
 
@@ -49,6 +48,10 @@ class NoiseApplier:
 
                 noise = generate_noise(self.n_samples, color=noise_type, mean=mean, variance=variance)
 
-            noisy_datasets[name] = self.signal + noise
+            dataset_metadata = {"noise_type": config.type, **config.n_params}
+
+            noisy_datasets[config.name] = DatasetConfig(
+                name=config.name, signal=self.signal + noise, metadata=dataset_metadata
+            )
 
         return noisy_datasets
