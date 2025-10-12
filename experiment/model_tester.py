@@ -45,24 +45,23 @@ class ModelTester:
         auto_mse = mean_squared_error(test_signal[self.common_params["sequence_length"] :], auto_preds)
 
         if mlflow_run_id:
-            with mlflow.start_run(run_id=mlflow_run_id):
-                mlflow.log_metric("test_onestep_mse", mse_onestep)
-                mlflow.log_metric("test_auto_mse", auto_mse)
+            mlflow.log_metric("test_onestep_mse", mse_onestep)
+            mlflow.log_metric("test_auto_mse", auto_mse)
 
-                if self.save_predictions:
-                    onestep_preds_path = "preds_onestep.csv"
-                    df_onestep = pd.DataFrame({"true_values": true_preds, "predictions": preds})
-                    df_onestep.to_csv(onestep_preds_path, index=False)
-                    mlflow.log_artifact(onestep_preds_path, "predictions")
-                    os.remove(onestep_preds_path)
-                    auto_preds_path = "preds_auto.csv"
+            if self.save_predictions:
+                onestep_preds_path = "preds_onestep.csv"
+                df_onestep = pd.DataFrame({"true_values": true_preds, "predictions": preds})
+                df_onestep.to_csv(onestep_preds_path, index=False)
+                mlflow.log_artifact(onestep_preds_path, "predictions")
+                os.remove(onestep_preds_path)
+                auto_preds_path = "preds_auto.csv"
 
-                    df_auto = pd.DataFrame(
-                        {"true_values": test_signal[self.common_params["sequence_length"] :], "predictions": auto_preds}
-                    )
-                    df_auto.to_csv(auto_preds_path, index=False)
-                    mlflow.log_artifact(auto_preds_path, "predictions")
-                    os.remove(auto_preds_path)
+                df_auto = pd.DataFrame(
+                    {"true_values": test_signal[self.common_params["sequence_length"] :], "predictions": auto_preds}
+                )
+                df_auto.to_csv(auto_preds_path, index=False)
+                mlflow.log_artifact(auto_preds_path, "predictions")
+                os.remove(auto_preds_path)
 
         return {
             "run_id": mlflow_run_id,

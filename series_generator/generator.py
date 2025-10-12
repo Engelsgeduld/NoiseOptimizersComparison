@@ -13,10 +13,12 @@ class SeriesGenerator:
         base_process_config: dict[str, Any] | None = None,
         trend_config: dict[str, Any] | None = None,
         seasonalities: list[dict[str, Any]] | None = None,
+        random_state: int | None = None,
     ):
         self.base_process_config = base_process_config
         self.trend_config = trend_config
         self.seasonalities = seasonalities if seasonalities is not None else []
+        self.random_state = random_state
 
     def _create_component(self, config: dict[str, Any] | None, length: int) -> TimeSeries | None:
         if not config:
@@ -31,7 +33,10 @@ class SeriesGenerator:
         import inspect
 
         sig = inspect.signature(generator_func)
-
+        if self.random_state:
+            np.random.seed(self.random_state)  # noqa
+        else:
+            np.random.seed()  # noqa
         if "length" in sig.parameters:
             component = generator_func(length=length, **params)
         else:
