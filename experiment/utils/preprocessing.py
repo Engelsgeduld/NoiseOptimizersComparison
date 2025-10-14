@@ -39,7 +39,7 @@ class IdentityPreprocessor(BasePreprocessor):
 
 
 class ScalingAndDifferencingPreprocessor(BasePreprocessor):
-    def __init__(self, feature_range: tuple[int, int]=(0, 1)):
+    def __init__(self, feature_range: tuple[int, int] = (0, 1)):
         self.scaler = MinMaxScaler(feature_range=feature_range)
         self.last_train_value_scaled = None
 
