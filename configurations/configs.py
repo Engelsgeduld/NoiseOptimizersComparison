@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 import numpy as np
 from torch import nn
 
+from experiment.utils.preprocessing import BasePreprocessor
+
 
 @dataclass
 class NoiseConfig:
@@ -41,6 +43,7 @@ class ExperimentConfig:
     optimizer_params: dict
     criterion: nn.Module
     datasets: list[str]
+    preproc: BasePreprocessor
     politic: str = "standard"
     politic_params: dict = field(default_factory=dict)
     n_runs: int = 5

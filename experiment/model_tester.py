@@ -8,7 +8,7 @@ from sklearn.metrics import mean_squared_error
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from experiment.utils.sequences_creator import create_sequences
+from experiment.utils.preprocessing import BasePreprocessor
 
 
 class ModelTester:
@@ -18,7 +18,12 @@ class ModelTester:
         self.save_predictions = save_predictions
 
     def test_model(
-        self, test_signal: np.ndarray, model: nn.Module | None = None, mlflow_run_id: str | None = None
+        self,
+        test_signal: np.ndarray,
+        start_sequence: np.ndarray,
+        prep: BasePreprocessor,
+        model: nn.Module | None = None,
+        mlflow_run_id: str | None = None,
     ) -> dict:
         assert model is not None or mlflow_run_id is not None, "Нужно передать либо модель, либо mlflow_run_id"
 
@@ -27,22 +32,29 @@ class ModelTester:
             model = mlflow.pytorch.load_model(model_uri)
         model.to(self.device)
 
-        X_test, y_test = create_sequences(test_signal, self.common_params["sequence_length"])
-        test_loader = DataLoader(
+        inference_data = prep.prepare_for_inference(test_signal, self.common_params["sequence_length"])
+
+        X_test_model = inference_data["X_test_model"]
+        y_test_unscaled = inference_data["y_test_unscaled"]
+        reconstruction_aids = inference_data["reconstruction_aids"]
+
+        onestep_loader = DataLoader(
             TensorDataset(
-                torch.from_numpy(X_test).float().unsqueeze(-1), torch.from_numpy(y_test).float().unsqueeze(-1)
+                torch.from_numpy(X_test_model).float().unsqueeze(-1),
+                torch.from_numpy(np.zeros(len(X_test_model))).float().unsqueeze(-1),
             ),
             batch_size=self.common_params["batch_size"],
             shuffle=False,
         )
 
-        preds, true_preds = self.predict_one_step(model, test_loader)
-        mse_onestep = mean_squared_error(true_preds, preds)
+        predicted_processed, _ = self.predict_one_step(model, onestep_loader)
+        preds_onestep_unscaled = prep.reconstruct_onestep(predicted_processed, reconstruction_aids)
+        mse_onestep = mean_squared_error(y_test_unscaled, preds_onestep_unscaled)
 
-        start_sequence = test_signal[: self.common_params["sequence_length"]]
-        n_predict = len(test_signal) - self.common_params["sequence_length"]
-        auto_preds = self.predict_autoregressive(model, start_sequence, n_predict)
-        auto_mse = mean_squared_error(test_signal[self.common_params["sequence_length"] :], auto_preds)
+        n_predict = len(test_signal)
+        predicted_changes_auto = self.predict_autoregressive(model, start_sequence, n_predict)
+        preds_auto_unscaled = prep.reconstruct_autoregressive(predicted_changes_auto)
+        auto_mse = mean_squared_error(test_signal, preds_auto_unscaled)
 
         if mlflow_run_id:
             mlflow.log_metric("test_onestep_mse", mse_onestep)
@@ -50,15 +62,13 @@ class ModelTester:
 
             if self.save_predictions:
                 onestep_preds_path = "preds_onestep.csv"
-                df_onestep = pd.DataFrame({"true_values": true_preds, "predictions": preds})
+                df_onestep = pd.DataFrame({"true_values": y_test_unscaled, "predictions": preds_onestep_unscaled})
                 df_onestep.to_csv(onestep_preds_path, index=False)
                 mlflow.log_artifact(onestep_preds_path, "predictions")
                 os.remove(onestep_preds_path)
                 auto_preds_path = "preds_auto.csv"
 
-                df_auto = pd.DataFrame(
-                    {"true_values": test_signal[self.common_params["sequence_length"] :], "predictions": auto_preds}
-                )
+                df_auto = pd.DataFrame({"true_values": test_signal, "predictions": preds_auto_unscaled})
                 df_auto.to_csv(auto_preds_path, index=False)
                 mlflow.log_artifact(auto_preds_path, "predictions")
                 os.remove(auto_preds_path)
@@ -67,8 +77,8 @@ class ModelTester:
             "run_id": mlflow_run_id,
             "test_onestep_mse": mse_onestep,
             "test_auto_mse": auto_mse,
-            "preds_onestep": preds,
-            "preds_auto": auto_preds,
+            "preds_onestep": preds_onestep_unscaled,
+            "preds_auto": preds_auto_unscaled,
             "model": model,
         }
 

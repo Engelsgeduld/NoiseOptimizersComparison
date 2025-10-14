@@ -1,6 +1,7 @@
 from typing import Any
 
 import mlflow
+import numpy as np
 import pandas as pd
 from scipy import stats
 
@@ -44,6 +45,7 @@ class SessionRunner:
             params_to_log["exp_name"] = exp_conf.exp_name
             params_to_log["politic"] = exp_conf.politic
             params_to_log["politic_params"] = exp_conf.politic_params
+            params_to_log["dataset"] = dataset_name
             params_to_log["model"] = exp_conf.model
             params_to_log["optimizer"] = exp_conf.optimizer
             params_to_log["model_params"] = exp_conf.model_params
@@ -53,9 +55,18 @@ class SessionRunner:
             mlflow.log_params(params_to_log)
             mlflow.set_tag("parent_run", "True")
 
+            processed_train_signal = exp_conf.preproc.fit_transform(dataset_config.signal)
+
+            dataset_config.signal = processed_train_signal
+
+            seq_len = self.session_config.common_params["sequence_length"]
+            start_sequence = processed_train_signal[-seq_len:]
+
             trial_results = []
             for i in range(exp_conf.n_runs):
-                result = self._run_single_trial(exp_conf, dataset_config, run_number=i + 1, base_params=params_to_log)
+                result = self._run_single_trial(
+                    exp_conf, dataset_config, run_number=i + 1, base_params=params_to_log, start_seq=start_sequence
+                )
                 trial_results.append(result)
 
             aggregated_metrics = self._aggregate_and_log_results(trial_results)
@@ -70,7 +81,12 @@ class SessionRunner:
             return final_result
 
     def _run_single_trial(
-        self, exp_conf: ExperimentConfig, dataset_config: DatasetConfig, run_number: int, base_params: dict
+        self,
+        exp_conf: ExperimentConfig,
+        dataset_config: DatasetConfig,
+        run_number: int,
+        base_params: dict,
+        start_seq: np.ndarray,
     ) -> dict[str, Any]:
         with mlflow.start_run(run_name=f"run_{run_number}", nested=True) as child_run:
             mlflow.log_params({**base_params, "dataset": dataset_config.name})
@@ -91,6 +107,8 @@ class SessionRunner:
                 model=train_result.get("model"),
                 mlflow_run_id=child_run.info.run_id,
                 test_signal=self.session_config.test_signal,
+                prep=exp_conf.preproc,
+                start_sequence=start_seq,
             )
 
             del test_result["model"]
