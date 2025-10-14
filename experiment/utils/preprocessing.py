@@ -60,15 +60,17 @@ class ScalingAndDifferencingPreprocessor(BasePreprocessor):
 
     def prepare_for_inference(self, test_signal: np.ndarray, sequence_length: int) -> dict:
         scaled_test_signal = self.scaler.transform(test_signal.reshape(-1, 1)).flatten()
-        X_test_scaled, _ = create_sequences(scaled_test_signal, sequence_length)
+
+        _, y_test_scaled = create_sequences(scaled_test_signal, sequence_length)
+        _, y_test_unscaled = create_sequences(test_signal, sequence_length)
 
         stationary_test_signal = scaled_test_signal[1:] - scaled_test_signal[:-1]
         X_test_diff, _ = create_sequences(stationary_test_signal, sequence_length)
 
-        _, y_test_unscaled = create_sequences(test_signal, sequence_length)
+        num_predictions = len(X_test_diff)
 
         return {
             "X_test_model": X_test_diff,
-            "y_test_unscaled": y_test_unscaled,
-            "reconstruction_aids": X_test_scaled[:, -1],
+            "y_test_unscaled": y_test_unscaled[:num_predictions],
+            "reconstruction_aids": y_test_scaled[:num_predictions],
         }
