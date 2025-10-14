@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 
 import numpy as np
-from sequences_creator import create_sequences
 from sklearn.preprocessing import MinMaxScaler
+
+from experiment.utils.sequences_creator import create_sequences
 
 
 class BasePreprocessor(ABC):
