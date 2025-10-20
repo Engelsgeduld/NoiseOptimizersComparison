@@ -39,6 +39,30 @@ class IdentityPreprocessor(BasePreprocessor):
         return {"X_test_model": X_test, "y_test_unscaled": y_test, "reconstruction_aids": np.zeros(len(X_test))}
 
 
+class ScalingPreprocessor(BasePreprocessor):
+    def __init__(self, feature_range: tuple[float, float]=(0, 1)):
+        self.scaler = MinMaxScaler(feature_range=feature_range)
+
+    def fit_transform(self, train_signal: np.ndarray) -> np.ndarray:
+        return self.scaler.fit_transform(train_signal.reshape(-1, 1)).flatten()
+
+    def reconstruct_autoregressive(self, predicted_processed: np.ndarray) -> np.ndarray:
+        return self.scaler.inverse_transform(predicted_processed.reshape(-1, 1)).flatten()
+
+    def reconstruct_onestep(self, predicted_processed: np.ndarray, aids: np.ndarray) -> np.ndarray:
+        return self.scaler.inverse_transform(predicted_processed.reshape(-1, 1)).flatten()
+
+    def prepare_for_inference(self, test_signal: np.ndarray, sequence_length: int) -> dict:
+        scaled_test_signal = self.scaler.transform(test_signal.reshape(-1, 1)).flatten()
+        X_test_scaled, _ = create_sequences(scaled_test_signal, sequence_length)
+        _, y_test_unscaled = create_sequences(test_signal, sequence_length)
+        return {
+            "X_test_model": X_test_scaled,
+            "y_test_unscaled": y_test_unscaled,
+            "reconstruction_aids": np.zeros(len(X_test_scaled)),
+        }
+
+
 class ScalingAndDifferencingPreprocessor(BasePreprocessor):
     def __init__(self, feature_range: tuple[int, int] = (0, 1)):
         self.scaler = MinMaxScaler(feature_range=feature_range)
