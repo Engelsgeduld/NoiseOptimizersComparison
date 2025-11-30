@@ -40,7 +40,7 @@ class IdentityPreprocessor(BasePreprocessor):
 
 
 class ScalingPreprocessor(BasePreprocessor):
-    def __init__(self, feature_range: tuple[float, float]=(0, 1)):
+    def __init__(self, feature_range: tuple[float, float] = (0, 1)):
         self.scaler = MinMaxScaler(feature_range=feature_range)
 
     def fit_transform(self, train_signal: np.ndarray) -> np.ndarray:
