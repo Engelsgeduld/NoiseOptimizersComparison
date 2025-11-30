@@ -55,18 +55,9 @@ class SessionRunner:
             mlflow.log_params(params_to_log)
             mlflow.set_tag("parent_run", "True")
 
-            processed_train_signal = exp_conf.preproc.fit_transform(dataset_config.signal)
-
-            dataset_config.signal = processed_train_signal
-
-            seq_len = self.session_config.common_params["sequence_length"]
-            start_sequence = processed_train_signal[-seq_len:]
-
             trial_results = []
             for i in range(exp_conf.n_runs):
-                result = self._run_single_trial(
-                    exp_conf, dataset_config, run_number=i + 1, base_params=params_to_log, start_seq=start_sequence
-                )
+                result = self._run_single_trial(exp_conf, dataset_config, run_number=i + 1, base_params=params_to_log)
                 trial_results.append(result)
 
             aggregated_metrics = self._aggregate_and_log_results(trial_results)
@@ -86,7 +77,6 @@ class SessionRunner:
         dataset_config: DatasetConfig,
         run_number: int,
         base_params: dict,
-        start_seq: np.ndarray,
     ) -> dict[str, Any]:
         with mlflow.start_run(run_name=f"run_{run_number}", nested=True) as child_run:
             mlflow.log_params({**base_params, "dataset": dataset_config.name})
@@ -101,6 +91,10 @@ class SessionRunner:
             )
 
             train_result = trainer.train_on_dataset(dataset_config.signal, dataset_config.name)
+            start_seq = train_result.get("start_sequence")
+
+            if start_seq is None:
+                raise ValueError("Trainer did not return start_sequence")
 
             tester = ModelTester(self.session_config.common_params, save_predictions=self.save_predictions)
             test_result = tester.test_model(
@@ -108,11 +102,14 @@ class SessionRunner:
                 mlflow_run_id=child_run.info.run_id,
                 test_signal=self.session_config.test_signal,
                 prep=exp_conf.preproc,
-                start_sequence=start_seq,
+                start_sequence=np.array(start_seq),
             )
 
             del test_result["model"]
             del train_result["model"]
+            if "start_sequence" in train_result:
+                del train_result["start_sequence"]
+
             return {**train_result, **test_result}
 
     def _aggregate_and_log_results(self, trial_results: list[dict[str, Any]]) -> dict[str, Any]:
