@@ -11,6 +11,7 @@ dependencies:
   - matplotlib
   - jupyterlab
   - mlflow
+  - boto3
   - pip
   - pip:
       - ruff
