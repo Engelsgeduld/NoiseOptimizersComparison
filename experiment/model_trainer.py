@@ -68,8 +68,16 @@ class BaseModelTrainer(ABC):
 
 class StandardTrainer(BaseModelTrainer):
     def train_on_dataset(self, signal: np.ndarray, dataset_name: str) -> dict:
-        X, y = create_sequences(signal, self.common_params["sequence_length"])
-        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+        train_signal, val_signal = train_test_split(signal, test_size=0.2, shuffle=False)
+
+        self.exp_conf.preproc.fit(train_signal)
+
+        train_signal_processed = self.exp_conf.preproc.transform(train_signal)
+        val_signal_processed = self.exp_conf.preproc.transform(val_signal)
+
+        X_train, y_train = create_sequences(train_signal_processed, self.common_params["sequence_length"])
+        X_val, y_val = create_sequences(val_signal_processed, self.common_params["sequence_length"])
+
         train_loader, val_loader = self._make_dataloaders(X_train, y_train, X_val, y_val)
 
         model = self._make_model()
@@ -89,8 +97,12 @@ class StandardTrainer(BaseModelTrainer):
                 pytorch_model=model, artifact_path="model", registered_model_name=model_artifact_name
             )
 
+        full_signal_processed = self.exp_conf.preproc.transform(signal)
+        start_sequence = full_signal_processed[-self.common_params["sequence_length"] :]
+
         return {
             "model": model,
             "final_train_loss": train_losses[-1],
             "final_val_loss": val_losses[-1],
+            "start_sequence": start_sequence,
         }

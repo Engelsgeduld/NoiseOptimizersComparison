@@ -1,6 +1,7 @@
 from typing import Any
 
 import mlflow
+import numpy as np
 import pandas as pd
 from scipy import stats
 
@@ -44,6 +45,7 @@ class SessionRunner:
             params_to_log["exp_name"] = exp_conf.exp_name
             params_to_log["politic"] = exp_conf.politic
             params_to_log["politic_params"] = exp_conf.politic_params
+            params_to_log["dataset"] = dataset_name
             params_to_log["model"] = exp_conf.model
             params_to_log["optimizer"] = exp_conf.optimizer
             params_to_log["model_params"] = exp_conf.model_params
@@ -70,7 +72,11 @@ class SessionRunner:
             return final_result
 
     def _run_single_trial(
-        self, exp_conf: ExperimentConfig, dataset_config: DatasetConfig, run_number: int, base_params: dict
+        self,
+        exp_conf: ExperimentConfig,
+        dataset_config: DatasetConfig,
+        run_number: int,
+        base_params: dict,
     ) -> dict[str, Any]:
         with mlflow.start_run(run_name=f"run_{run_number}", nested=True) as child_run:
             mlflow.log_params({**base_params, "dataset": dataset_config.name})
@@ -85,16 +91,25 @@ class SessionRunner:
             )
 
             train_result = trainer.train_on_dataset(dataset_config.signal, dataset_config.name)
+            start_seq = train_result.get("start_sequence")
+
+            if start_seq is None:
+                raise ValueError("Trainer did not return start_sequence")
 
             tester = ModelTester(self.session_config.common_params, save_predictions=self.save_predictions)
             test_result = tester.test_model(
                 model=train_result.get("model"),
                 mlflow_run_id=child_run.info.run_id,
                 test_signal=self.session_config.test_signal,
+                prep=exp_conf.preproc,
+                start_sequence=np.array(start_seq),
             )
 
             del test_result["model"]
             del train_result["model"]
+            if "start_sequence" in train_result:
+                del train_result["start_sequence"]
+
             return {**train_result, **test_result}
 
     def _aggregate_and_log_results(self, trial_results: list[dict[str, Any]]) -> dict[str, Any]:
