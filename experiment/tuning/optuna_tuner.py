@@ -4,9 +4,9 @@ import mlflow
 import optuna
 
 from configurations.configs import DatasetConfig, ExperimentConfig
+from configurations.politics import TRAINERS_MAP
 from configurations.tuning_configs import TuningConfig
-from experiment.model_trainer import StandardTrainer
-from experiment.utils.preprocessing import ScalingAndDifferencingPreprocessor
+from experiment.utils.preprocessing import BasePreprocessor, ScalingAndDifferencingPreprocessor
 
 
 class OptunaTuner:
@@ -15,10 +15,14 @@ class OptunaTuner:
         tuning_config: TuningConfig,
         common_params: dict[str, Any],
         datasets: dict[str, DatasetConfig],
+        politic: str = "standard",
+        preprocessor: BasePreprocessor | None = None,
     ):
         self.tuning_config = tuning_config
         self.common_params = common_params
         self.datasets = datasets
+        self.politic = politic
+        self.preprocessor = preprocessor if preprocessor is not None else ScalingAndDifferencingPreprocessor()
 
     def _sample_params(self, trial: optuna.Trial, param_grid: dict[str, Any]) -> dict[str, Any]:
         sampled_params = {}
@@ -37,6 +41,13 @@ class OptunaTuner:
         dataset_items = list(self.datasets.items())
 
         for i, (dataset_name, dataset_config) in enumerate(dataset_items):
+            # Create a fresh preprocessor instance for each dataset
+            if isinstance(self.preprocessor, type):
+                preproc_instance = self.preprocessor()
+            else:
+                # If it's an instance, create a new one of the same type
+                preproc_instance = type(self.preprocessor)()
+
             exp_conf = ExperimentConfig(
                 exp_name=f"tuning_trial_{trial.number}",
                 model=self.tuning_config.model,
@@ -45,11 +56,13 @@ class OptunaTuner:
                 optimizer_params=optimizer_params,
                 criterion=criterion,
                 datasets=[dataset_name],
-                preproc=ScalingAndDifferencingPreprocessor(),
+                preproc=preproc_instance,
                 n_runs=1,
+                politic=self.politic,
             )
 
-            trainer = StandardTrainer(exp_conf=exp_conf, common_params=self.common_params, log_model=False)
+            TrainerClass = TRAINERS_MAP[self.politic]
+            trainer = TrainerClass(exp_conf=exp_conf, common_params=self.common_params, log_model=False)
 
             try:
                 result = trainer.train_on_dataset(dataset_config.signal, dataset_name)
