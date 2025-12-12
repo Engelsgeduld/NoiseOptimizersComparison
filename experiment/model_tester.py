@@ -11,10 +11,18 @@ from torch.utils.data import DataLoader, TensorDataset
 from experiment.utils.preprocessing import BasePreprocessor
 
 
+def _device() -> str:
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 class ModelTester:
     def __init__(self, common_params: dict, save_predictions: bool = False):
         self.common_params = common_params
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(_device())
         self.save_predictions = save_predictions
 
     def test_model(
@@ -89,6 +97,8 @@ class ModelTester:
         with torch.no_grad():
             for X_batch, y_batch in dataloader:
                 outputs = model(X_batch.to(self.device))
+                if outputs.ndim == 3:
+                    outputs = outputs[:, -1, :]
                 predictions.append(outputs.cpu().numpy())
                 ground_truth.append(y_batch.cpu().numpy())
         return np.vstack(predictions).flatten(), np.vstack(ground_truth).flatten()
@@ -100,10 +110,16 @@ class ModelTester:
         current_sequence = torch.from_numpy(start_sequence).float().unsqueeze(0).unsqueeze(-1).to(self.device)
 
         with torch.no_grad():
-            for _ in range(n_predict):
+            for i in range(n_predict):
                 next_pred_tensor = model(current_sequence)
-                predictions.append(next_pred_tensor.cpu().numpy()[0, 0])
+                if next_pred_tensor.ndim == 3:
+                    next_pred_tensor = next_pred_tensor[:, -1, :]
+
+                pred_value = next_pred_tensor.cpu().numpy()[0, 0]
+                predictions.append(pred_value)
+
                 new_item_tensor = next_pred_tensor.unsqueeze(1)
                 current_sequence = torch.cat((current_sequence[:, 1:, :], new_item_tensor), dim=1)
 
-        return np.array(predictions)
+        predictions_array = np.array(predictions)
+        return predictions_array

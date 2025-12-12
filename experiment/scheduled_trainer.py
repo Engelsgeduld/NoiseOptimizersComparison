@@ -1,82 +1,56 @@
-from abc import ABC, abstractmethod
+import math
 
 import mlflow
 import numpy as np
 import torch
 from sklearn.model_selection import train_test_split
 from torch import nn
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 
-from configurations.configs import ExperimentConfig
-from configurations.models_optimizers import MODELS_MAP, OPTIMIZERS_MAP
+from experiment.model_trainer import StandardTrainer
 from experiment.utils.sequences_creator import create_sequences
 
 
-def _device() -> str:
-    if torch.cuda.is_available():
-        return "cuda"
-    if torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
+class ScheduledSamplingTrainer(StandardTrainer):
+    def _get_teacher_forcing_ratio(self, epoch: int) -> float:
+        decay_type = self.common_params.get("decay_type", "inverse_sigmoid")
+        k = self.common_params.get("k", 10)
+        min_ratio = self.common_params.get("min_ratio", 0.0)
 
+        if decay_type == "linear":
+            ratio = max(min_ratio, 1.0 - k * epoch)
+        elif decay_type == "exponential":
+            ratio = max(min_ratio, math.exp(-k * epoch))
+        elif decay_type == "inverse_sigmoid":
+            ratio = max(min_ratio, k / (k + math.exp(epoch / k)))
+        else:
+            ratio = 1.0
 
-class BaseModelTrainer(ABC):
-    def __init__(self, exp_conf: ExperimentConfig, common_params: dict, log_model: bool = True, **kwargs: dict):
-        self.exp_conf = exp_conf
-        self.common_params = common_params
-        self.log_model = log_model
-        self.device = torch.device(_device())
-        self.models_map = MODELS_MAP
-        self.optimizers_map = OPTIMIZERS_MAP
-
-    def _make_model(self) -> nn.Module:
-        ModelClass = self.models_map[self.exp_conf.model]
-        return ModelClass(**self.exp_conf.model_params).to(self.device)
-
-    def _make_optimizer(self, model: nn.Module) -> torch.optim.Optimizer:
-        OptClass = self.optimizers_map[self.exp_conf.optimizer]
-        return OptClass(model.parameters(), **self.exp_conf.optimizer_params)
-
-    def _make_dataloaders(
-        self, X_train: np.ndarray, y_train: np.ndarray, X_val: np.ndarray, y_val: np.ndarray
-    ) -> tuple[DataLoader, DataLoader]:
-        def make_ds(X: np.ndarray, y: np.ndarray) -> TensorDataset:
-            return TensorDataset(torch.from_numpy(X).float().unsqueeze(-1), torch.from_numpy(y).float().unsqueeze(-1))
-
-        train_loader = DataLoader(make_ds(X_train, y_train), batch_size=self.common_params["batch_size"], shuffle=True)
-        val_loader = DataLoader(make_ds(X_val, y_val), batch_size=self.common_params["batch_size"], shuffle=False)
-        return train_loader, val_loader
+        return ratio
 
     def _train_one_epoch(self, model: nn.Module, loader: DataLoader, optimizer: torch.optim.Optimizer) -> float:
         model.train()
         total = 0
+
+        ratio = self._get_teacher_forcing_ratio(self.current_epoch)
+        mlflow.log_metric("teacher_forcing_ratio", ratio, step=self.current_epoch)
+
         for X, y in loader:
             X, y = X.to(self.device), y.to(self.device)
+
             targets = torch.cat((X[:, 1:, :], y.unsqueeze(1)), dim=1)
+
             optimizer.zero_grad()
-            loss = self.exp_conf.criterion(model(X), targets)
+
+            outputs = model(X, teacher_forcing_ratio=ratio)
+
+            loss = self.exp_conf.criterion(outputs, targets)
             loss.backward()
             optimizer.step()
             total += loss.item()
+
         return total / len(loader)
 
-    def _validate_one_epoch(self, model: nn.Module, loader: DataLoader) -> float:
-        model.eval()
-        total = 0
-        with torch.no_grad():
-            for X, y in loader:
-                X, y = X.to(self.device), y.to(self.device)
-                targets = torch.cat((X[:, 1:, :], y.unsqueeze(1)), dim=1)
-                loss = self.exp_conf.criterion(model(X), targets)
-                total += loss.item()
-        return total / len(loader)
-
-    @abstractmethod
-    def train_on_dataset(self, signal: np.ndarray, dataset_name: str) -> dict:
-        pass
-
-
-class StandardTrainer(BaseModelTrainer):
     def train_on_dataset(self, signal: np.ndarray, dataset_name: str) -> dict:
         train_signal, val_signal = train_test_split(signal, test_size=0.2, shuffle=False)
 
@@ -95,6 +69,7 @@ class StandardTrainer(BaseModelTrainer):
 
         train_losses, val_losses = [], []
         for epoch in range(self.common_params["epochs"]):
+            self.current_epoch = epoch
             train_loss = self._train_one_epoch(model, train_loader, optimizer)
             val_loss = self._validate_one_epoch(model, val_loader)
             mlflow.log_metrics({"train_loss": train_loss, "val_loss": val_loss}, step=epoch)
